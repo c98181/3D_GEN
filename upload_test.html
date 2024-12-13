@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>測試平台</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 800px; 
+            margin: 0 auto; 
+            padding: 20px; 
+        }
+        input, button { 
+            width: 100%; 
+            margin: 10px 0; 
+            padding: 10px; 
+        }
+        #result, #collections-list {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            background-color: #f4f4f4;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .section {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 20px;
+        }
+        #generation-details, #collections-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        .generation-item, .collection-item {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="section" id="login-section">
+        <h2>登入</h2>
+        <input type="text" id="username" placeholder="使用者名稱">
+        <input type="password" id="password" placeholder="密碼">
+        <button onclick="login()">登入</button>
+    </div>
+
+    <div class="section" id="upload-section" style="display:none;">
+        <h2>圖片上傳</h2>
+        <input type="file" id="image" accept="image/*">
+        <button onclick="uploadImage()">上傳圖片</button>
+        <div id="generation-details"></div>
+    </div>
+
+    <div class="section" id="generation-section" style="display:none;">
+        <h2>AI 生成</h2>
+        <input type="text" id="input-text" placeholder="輸入生成文字">
+        <button onclick="generateAI()">生成</button>
+    </div>
+
+    <div class="section" id="collections-section" style="display:none;">
+        <h2>我的收藏</h2>
+        <button onclick="listCollections()">載入收藏</button>
+        <div id="collections-list"></div>
+    </div>
+
+    <div id="result"></div>
+
+    <script>
+        let currentGenerationId = null;
+
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            fetch('/trelli_platform/php_backend/auth/login.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password }),
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('login-section').style.display = 'none';
+                document.getElementById('upload-section').style.display = 'block';
+                document.getElementById('generation-section').style.display = 'block';
+                document.getElementById('collections-section').style.display = 'block';
+                document.getElementById('result').textContent = '登入成功！';
+            })
+            .catch(error => {
+                document.getElementById('result').textContent = '登入失敗：' + error;
+            });
+        }
+
+        function uploadImage() {
+            const imageFile = document.getElementById('image').files[0];
+            if (!imageFile) {
+                alert('請選擇圖片');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('image', imageFile);
+
+            fetch('/trelli_platform/php_backend/api/generations/upload_3d.php', {
+                method: 'POST',
+                body: formData,
+                credentials: 'include'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Server response not OK');
+                }
+                return response.json();
+            })
+            .then(data => {
+                const generationId = data.data ? data.data.generation_id : data.generation_id;
+                currentGenerationId = generationId;
+                document.getElementById('generation-details').innerHTML = `
+                    <div class="generation-item">
+                        <p>Generation ID: ${generationId}</p>
+                        <button onclick="addToCollection(${generationId})">加入收藏</button>
+                    </div>
+                `;
+                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(error => {
+                document.getElementById('result').textContent = '上傳失敗：' + error;
+            });
+        }
+
+        function generateAI() {
+            const inputText = document.getElementById('input-text').value;
+            
+            fetch('/trelli_platform/php_backend/api/generations/create.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input_text: inputText }),
+                credentials: 'include'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Server response not OK');
+                }
+                return response.json();
+            })
+            .then(data => {
+                const generationId = data.data ? data.data.generation_id : data.generation_id;
+                currentGenerationId = generationId;
+                document.getElementById('generation-details').innerHTML = `
+                    <div class="generation-item">
+                        <p>Generation ID: ${generationId}</p>
+                        <button onclick="addToCollection(${generationId})">加入收藏</button>
+                    </div>
+                `;
+                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(error => {
+                document.getElementById('result').textContent = '生成失敗：' + error;
+            });
+        }
+
+        function addToCollection(generationId) {
+            fetch('/trelli_platform/php_backend/api/collections/add.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ generation_id: generationId }),
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('result').textContent = '成功加入收藏！';
+            })
+            .catch(error => {
+                document.getElementById('result').textContent = '加入收藏失敗：' + error;
+            });
+        }
+        function listCollections() {
+            fetch('/trelli_platform/php_backend/api/collections/list.php', {
+                method: 'GET',
+                credentials: 'include'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Server response not OK');
+                }
+                return response.json();
+            })
+            .then(responseData => {
+                console.log('Full collections response:', responseData);
+
+                // 使用 responseData.data 而不是直接使用 responseData
+                const data = responseData.data;
+
+                const collectionsList = document.getElementById('collections-list');
+                collectionsList.innerHTML = '';
+                
+                if (!data || !data.collections || !Array.isArray(data.collections)) {
+                    throw new Error('Invalid collections data');
+                }
+                
+                data.collections.forEach(collection => {
+                    const collectionItem = document.createElement('div');
+                    collectionItem.classList.add('collection-item');
+                    collectionItem.innerHTML = `
+                        <p>Collection ID: ${collection.collection_id}</p>
+                        <p>Generation ID: ${collection.generation_id}</p>
+                        <p>Input Text: ${collection.input_text || 'N/A'}</p>
+                        <button onclick="removeCollection(${collection.collection_id})">移除</button>
+                    `;
+                    collectionsList.appendChild(collectionItem);
+                });
+
+                document.getElementById('result').textContent = `共 ${data.total_count || 0} 個收藏`;
+            })
+            .catch(error => {
+                console.error('Collections error:', error);
+                document.getElementById('result').textContent = '載入收藏失敗：' + error.message;
+            });
+        }
+        function removeCollection(collectionId) {
+            fetch('/trelli_platform/php_backend/api/collections/remove.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ collection_id: collectionId }),
+                credentials: 'include'
+            })
+            .then(response => response.json())
+            .then(data => {
+                listCollections();
+                document.getElementById('result').textContent = '成功移除收藏！';
+            })
+            .catch(error => {
+                document.getElementById('result').textContent = '移除收藏失敗：' + error;
+            });
+        }
+    </script>
+</body>
+</html>
